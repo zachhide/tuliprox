@@ -12,3 +12,9 @@ impl UserCredential {
         self.password.zeroize();
     }
 }
+
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Default)]
+pub struct TokenResponse {
+    pub token: String,
+}

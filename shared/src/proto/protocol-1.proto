@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package ws.protocol;
+
+message ConfigModel {
+  uint32 threads = 1;
+  ConfigApiModel api = 2;
+  string working_dir = 3;
+  string backup_dir = 4;
+  string user_config_dir = 5;
+  string mapping_path = 6;
+  string custom_stream_response_path = 7;
+  VideoConfigModel video = 8;
+  repeated ScheduleConfigModel schedules = 9;
+  LogConfigModel log = 10;
+  bool user_access_control = 11;
+  uint32 connect_timeout_secs = 12;
+  uint32 sleep_timer_mins = 13;
+  bool update_on_boot = 14;
+  bool config_hot_reload = 15;
+  WebUiConfigModel web_ui = 16;
+  MessagingConfigModel messaging = 17;
+  ReverseProxyConfigModel reverse_proxy = 18;
+  HdHomeRunConfigModel hdhomerun = 19;
+  ProxyConfigModel proxy = 20;
+  IpCheckConfigModel ipcheck = 21;
+}
+
+message ConfigApiModel {
+  string host = 1;
+  uint32 port = 2;
+  string web_root = 3;
+}
+
+message VideoDownloadConfigModel {
+  map<string, string> headers = 1;
+  string directory = 2;
+  bool organize_into_directories = 3;
+  string episode_pattern = 4;
+}
+
+message VideoConfigModel {
+  repeated string extensions = 1;
+  VideoDownloadConfigModel download = 2;
+  string web_search = 3;
+}
+
+message ScheduleConfigModel {
+  string schedule = 1;
+  repeated string targets = 2;
+}
+
+message WebUiConfigModel {
+  bool enabled = 1;
+  bool user_ui_enabled = 2;
+  string path = 3;
+  WebAuthConfigModel auth = 4;
+  string player_server = 5;
+}
+
+message WebAuthConfigModel {
+  bool enabled = 1;
+  string issuer = 2;
+  string secret = 3;
+  string userfile = 4;
+}
+
+message TelegramMessagingConfigModel {
+  string bot_token = 1;
+  repeated string chat_ids = 2;
+}
+
+message RestMessagingConfigModel {
+  string url = 1;
+}
+
+message PushoverMessagingConfigModel {
+  string url = 1;
+  string token = 2;
+  string user = 3;
+}
+
+message MessagingConfigModel {
+  repeated string notify_on = 1;
+  TelegramMessagingConfigModel telegram = 2;
+  RestMessagingConfigModel rest = 3;
+  PushoverMessagingConfigModel pushover = 4;
+}
+
+message LogConfigModel {
+  bool sanitize_sensitive_info = 1;
+  bool log_active_user = 2;
+  string log_level = 3;
+}
+
+message ReverseProxyConfigModel {
+  bool resource_rewrite_disabled = 1;
+  bool disable_referer_header = 2;
+  StreamConfigModel stream = 3;
+  CacheConfigModel cache = 4;
+  RateLimitConfigModel rate_limit = 5;
+}
+
+message StreamConfigModel {
+  bool retry = 1;
+  StreamBufferConfigModel buffer = 2;
+  string throttle = 3;
+  uint64 grace_period_millis = 4;
+  uint64 grace_period_timeout_secs = 5;
+  uint32 forced_retry_interval_secs = 6;
+  uint64 throttle_kbps = 7;
+}
+
+message StreamBufferConfigModel {
+  bool enabled = 1;
+  uint32 size = 2;
+}
+
+message CacheConfigModel {
+  bool enabled = 1;
+  string size = 2;
+  string dir = 3;
+}
+
+message RateLimitConfigModel {
+  bool enabled = 1;
+  uint64 period_millis = 2;
+  uint32 burst_size = 3;
+}
+
+message HdHomeRunConfigModel {
+  bool enabled = 1;
+  bool auth = 2;
+  repeated HdHomeRunDeviceConfigModel devices = 3;
+}
+
+message HdHomeRunDeviceConfigModel {
+  string friendly_name = 1;
+  string manufacturer = 2;
+  string model_name = 3;
+  string model_number = 4;
+  string firmware_name = 5;
+  string firmware_version = 6;
+  string device_type = 7;
+  string device_udn = 8;
+  string name = 9;
+  uint32 port = 10;
+  uint32 tuner_count = 11;
+}
+
+message ProxyConfigModel {
+  string url = 1;
+  string username = 2;
+  string password = 3;
+}
+
+message IpCheckConfigModel {
+  string url = 1;
+  string url_ipv4 = 2;
+  string url_ipv6 = 3;
+  string pattern_ipv4 = 4;
+  string pattern_ipv6 = 5;
+}
+
+//----------------------------------
+
+message Container {
+  repeated Message message = 1;
+}
+
+
+message ConfigRequest {
+  uint32 offset = 1;
+  uint32 count = 2;
+}
+
+message ConfigResponse {
+  repeated ConfigModel config = 1;
+}
+
+message Message {
+  oneof body {
+    ConfigRequest config_request = 1;
+    ConfigResponse config_response = 2;
+  }
+}
