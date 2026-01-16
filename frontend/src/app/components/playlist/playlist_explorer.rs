@@ -180,7 +180,7 @@ pub fn PlaylistExplorer() -> Html {
                     }
                     ExplorerAction::CopyLinkProviderUrl => {
                         if let Some(dto) = &*selected_channel {
-                            copy_to_clipboard.emit(dto.url.clone());
+                            copy_to_clipboard.emit(dto.url.to_string());
                         }
                     }
                 }
@@ -305,11 +305,11 @@ pub fn PlaylistExplorer() -> Html {
     };
 
     let render_channel_logo = |chan: &Rc<CommonPlaylistItem>| {
-        let logo = if chan.logo.is_empty() { chan.logo_small.as_str() } else { chan.logo.as_str() };
+        let logo = if chan.logo.is_empty() { &chan.logo_small } else { &chan.logo };
         if logo.is_empty() {
             html! {}
         } else {
-            html! { <img class="tp__playlist-explorer__channel-logo" alt={"n/a"} src={logo.to_owned()} loading="lazy"
+            html! { <img class="tp__playlist-explorer__channel-logo" alt={"n/a"} src={logo.to_string()} loading="lazy"
                     onerror={Callback::from(move |e: web_sys::Event| {
                     if let Some(target)  = e.target() {
                         if let Ok(img) = target.dyn_into::<web_sys::HtmlMediaElement>() {

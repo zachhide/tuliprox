@@ -4,9 +4,12 @@ use crate::{config_field_child, edit_field_bool, edit_field_number_u16, edit_fie
 use shared::model::{TargetOutputDto, TraktApiConfigDto, TraktConfigDto, TraktContentType, TraktListConfigDto, XtreamTargetOutputDto};
 use std::fmt::Display;
 use std::rc::Rc;
+use std::str::FromStr;
 use web_sys::MouseEvent;
-use yew::{classes, function_component, html, use_context, use_effect_with, use_reducer, use_state, Callback, Html, Properties, UseReducerHandle};
+use yew::{function_component, html, use_context, use_effect_with, use_reducer, use_state, Callback, Html, Properties, UseReducerHandle};
 use yew_i18n::use_translation;
+use shared::error::TuliproxError;
+use shared::info_err_res;
 
 const LABEL_SKIP_DIRECT_SOURCE: &str = "LABEL.SKIP_DIRECT_SOURCE";
 const LABEL_LIVE: &str = "LABEL.LIVE";
@@ -22,18 +25,37 @@ const LABEL_TRAKT_LISTS: &str = "LABEL.TRAKT_LISTS";
 const LABEL_ADD_TRAKT_LIST: &str = "LABEL.ADD_TRAKT_LIST";
 const LABEL_API_CONFIGURATION: &str = "LABEL.API_CONFIGURATION";
 const LABEL_USER_AGENT: &str = "LABEL.API_USER_AGENT";
+const LABEL_MAIN: &str = "LABEL.MAIN_CONFIG";
+const LABEL_TRAKT: &str = "LABEL.TRAKT";
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-enum OutputFormPage {
+enum XtreamOutputFormPage {
     Main,
     Trakt,
 }
 
-impl Display for OutputFormPage {
+impl XtreamOutputFormPage {
+    const MAIN: &str = "Main";
+    const TRAKT: &str = "Trakt";
+}
+
+impl FromStr for XtreamOutputFormPage {
+    type Err = TuliproxError;
+
+    fn from_str(s: &str) -> Result<Self, TuliproxError> {
+        match s {
+            Self::MAIN => Ok(XtreamOutputFormPage::Main),
+            Self::TRAKT => Ok(XtreamOutputFormPage::Trakt),
+            _ => info_err_res!("Unknown xtream output form page: {s}"),
+        }
+    }
+}
+
+impl Display for XtreamOutputFormPage {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", match *self {
-            OutputFormPage::Main => "Main",
-            OutputFormPage::Trakt => "Trakt",
+            XtreamOutputFormPage::Main => "Main",
+            XtreamOutputFormPage::Trakt => "Trakt",
         })
     }
 }
@@ -92,11 +114,15 @@ pub fn XtreamTargetOutputView(props: &XtreamTargetOutputViewProps) -> Html {
     // State for showing trakt list form
     let show_trakt_list_form_state = use_state(|| false);
 
-    let view_visible = use_state(|| OutputFormPage::Main.to_string());
+    let view_visible = use_state(|| XtreamOutputFormPage::Main);
 
-    let on_tab_click = {
-        let view_visible = view_visible.clone();
-        Callback::from(move |page: OutputFormPage| view_visible.set(page.to_string()))
+    let handle_menu_click = {
+        let active_menu = view_visible.clone();
+        Callback::from(move |(name, _): (String, _)| {
+            if let Ok(view_type) = XtreamOutputFormPage::from_str(&name) {
+                active_menu.set(view_type);
+            }
+        })
     };
 
     {
@@ -279,39 +305,23 @@ pub fn XtreamTargetOutputView(props: &XtreamTargetOutputViewProps) -> Html {
     let render_edit_mode = || {
         html! {
             <div class="tp__input-form__body">
-                <div class="tp__tab-header">
-                {
-                    for [
-                        OutputFormPage::Main,
-                        OutputFormPage::Trakt,
-                    ].iter().map(|page| {
-                        let page_str = page.to_string();
-                        let active = *view_visible == page_str;
-                        let on_tab_click = {
-                            let on_tab_click = on_tab_click.clone();
-                            let page = *page;
-                            Callback::from(move |_| on_tab_click.emit(page))
-                        };
-                        html! {
-                            <button
-                                class={classes!("tp__tab-button", if active { "active" } else { "" })}
-                                onclick={on_tab_click}
-                            >
-                                { page_str.clone() }
-                            </button>
-                        }
-                    })
-                }
-            </div>
             <div class="tp__input-form__body__pages">
-                <Panel value={OutputFormPage::Main.to_string()} active={view_visible.to_string()}>
+                <Panel value={XtreamOutputFormPage::Main.to_string()} active={view_visible.to_string()}>
                 {render_output()}
                 </Panel>
-                <Panel value={OutputFormPage::Trakt.to_string()} active={view_visible.to_string()}>
+                <Panel value={XtreamOutputFormPage::Trakt.to_string()} active={view_visible.to_string()}>
                 {render_trakt()}
                 </Panel>
             </div>
             </div>
+        }
+    };
+    let render_sidebar = || {
+        html! {
+            <div class="tp__source-editor-form__sidebar">
+            <IconButton class={format!("tp__app-sidebar-menu--{}{}", XtreamOutputFormPage::Main, if *view_visible == XtreamOutputFormPage::Main { " active" } else {""})}  icon="Settings" hint={translate.t(LABEL_MAIN)} name={XtreamOutputFormPage::Main.to_string()} onclick={&handle_menu_click}></IconButton>
+            <IconButton class={format!("tp__app-sidebar-menu--{}{}", XtreamOutputFormPage::Trakt, if *view_visible == XtreamOutputFormPage::Trakt { " active" } else {""})}  icon="Trakt" hint={translate.t(LABEL_TRAKT)} name={XtreamOutputFormPage::Trakt.to_string()} onclick={&handle_menu_click}></IconButton>
+          </div>
         }
     };
 
@@ -348,7 +358,7 @@ pub fn XtreamTargetOutputView(props: &XtreamTargetOutputViewProps) -> Html {
 
     html! {
         <div class="tp__source-editor-form tp__config-view-page">
-             <div class="tp__source-editor-form__toolbar tp__form-page__toolbar">
+          <div class="tp__source-editor-form__toolbar tp__form-page__toolbar">
              <TextButton class="secondary" name="cancel_input"
                 icon="Cancel"
                 title={ translate.t("LABEL.CANCEL")}
@@ -358,7 +368,10 @@ pub fn XtreamTargetOutputView(props: &XtreamTargetOutputViewProps) -> Html {
                 title={ translate.t("LABEL.OK")}
                 onclick={handle_apply_target}></TextButton>
           </div>
-            { render_edit_mode() }
+          <div class="tp__source-editor-form__content">
+                { render_sidebar() }
+                { render_edit_mode() }
+          </div>
         </div>
-        }
+    }
 }

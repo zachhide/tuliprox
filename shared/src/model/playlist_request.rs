@@ -1,5 +1,5 @@
 use crate::model::{PlaylistItemType, SearchRequest, StreamProperties, XtreamCluster};
-use crate::utils::arc_str_serde;
+use crate::utils::{arc_str_serde, arc_str_option_serde};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
@@ -28,24 +28,34 @@ pub enum PlaylistRequest {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct CommonPlaylistItem {
     pub virtual_id: u32,
-    pub provider_id: String,
-    pub name: String,
+    #[serde(with = "arc_str_serde")]
+    pub provider_id: Arc<str>,
+    #[serde(with = "arc_str_serde")]
+    pub name: Arc<str>,
     pub chno: u32,
-    pub logo: String,
-    pub logo_small: String,
+    #[serde(with = "arc_str_serde")]
+    pub logo: Arc<str>,
+    #[serde(with = "arc_str_serde")]
+    pub logo_small: Arc<str>,
     #[serde(with = "arc_str_serde")]
     pub group: Arc<str>,
-    pub title: String,
-    pub parent_code: String,
-    pub audio_track: String,
-    pub time_shift: String,
-    pub rec: String,
-    pub url: String,
+    #[serde(with = "arc_str_serde")]
+    pub title: Arc<str>,
+    #[serde(with = "arc_str_serde")]
+    pub parent_code: Arc<str>,
+    #[serde(with = "arc_str_serde")]
+    pub audio_track: Arc<str>,
+    #[serde(with = "arc_str_serde")]
+    pub time_shift: Arc<str>,
+    #[serde(with = "arc_str_serde")]
+    pub rec: Arc<str>,
+    #[serde(with = "arc_str_serde")]
+    pub url: Arc<str>,
     #[serde(with = "arc_str_serde")]
     pub input_name: Arc<str>,
     pub item_type: PlaylistItemType,
-    #[serde(default)]
-    pub epg_channel_id: Option<String>,
+    #[serde(default, with = "arc_str_option_serde")]
+    pub epg_channel_id: Option<Arc<str>>,
     #[serde(default)]
     pub xtream_cluster: Option<XtreamCluster>,
     #[serde(default)]

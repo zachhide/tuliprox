@@ -27,7 +27,7 @@ use log::{debug, error, info, log_enabled, trace, warn};
 use reqwest::header::RETRY_AFTER;
 use serde::Serialize;
 use shared::model::{Claims, InputFetchMethod, PlaylistEntry, PlaylistItemType, StreamChannel, TargetType, UserConnectionPermission, XtreamCluster};
-use shared::utils::{bin_serialize, default_grace_period_millis, human_readable_kbps, trim_slash};
+use shared::utils::{bin_serialize, default_grace_period_millis, human_readable_kbps, trim_slash, Internable};
 use shared::utils::{
     extract_extension_from_url, replace_url_extension, sanitize_sensitive_info, DASH_EXT, HLS_EXT,
 };
@@ -279,10 +279,10 @@ pub fn get_stream_alternative_url(
     alias_input: &Arc<ProviderConfig>,
 ) -> String {
     let Some(input_user_info) = input.get_user_info() else {
-        return stream_url.to_owned();
+        return stream_url.to_string();
     };
     let Some(alt_input_user_info) = alias_input.get_user_info() else {
-        return stream_url.to_owned();
+        return stream_url.to_string();
     };
 
     let modified = stream_url.replacen(&input_user_info.base_url, &alt_input_user_info.base_url, 1);
@@ -290,11 +290,11 @@ pub fn get_stream_alternative_url(
     modified.replacen(&input_user_info.password, &alt_input_user_info.password, 1)
 }
 
-async fn get_redirect_alternative_url<'a>(
+async fn get_redirect_alternative_url(
     app_state: &Arc<AppState>,
-    redirect_url: &'a str,
+    redirect_url: &Arc<str>,
     input: &ConfigInput,
-) -> Cow<'a, str> {
+) -> Arc<str> {
     if let Some((base_url, username, password)) = input.get_matched_config_by_url(redirect_url) {
         if let Some(provider_cfg) = app_state
             .active_provider
@@ -309,15 +309,15 @@ async fn get_redirect_alternative_url<'a>(
                 ) {
                     new_url = new_url.replacen(old_username, new_username, 1);
                     new_url = new_url.replacen(old_password, new_password, 1);
-                    return Cow::Owned(new_url);
+                    return new_url.into();
                 }
                 // one has credentials the other not, something not right
-                return Cow::Borrowed(redirect_url);
+                return redirect_url.clone();
             }
-            return Cow::Owned(new_url);
+            return new_url.into();
         }
     }
-    Cow::Borrowed(redirect_url)
+    redirect_url.clone()
 }
 
 
@@ -342,7 +342,7 @@ async fn resolve_streaming_strategy(
     stream_url: &str,
     fingerprint: &Fingerprint,
     input: &ConfigInput,
-    force_provider: Option<&str>,
+    force_provider: Option<&Arc<str>>,
 ) -> StreamingStrategy {
     // allocate a provider connection
     let mut provider_connection_handle = match force_provider {
@@ -386,8 +386,8 @@ async fn resolve_streaming_strategy(
                             let stream = create_provider_connections_exhausted_stream(&app_state.app_config, &[]);
                             ProviderStreamState::Custom(stream)
                         },
-                        ProviderAllocation::Available(_) => ProviderStreamState::Available(Some(selected_provider_name), url),
-                        ProviderAllocation::GracePeriod(_) => ProviderStreamState::GracePeriod(Some(selected_provider_name), url),
+                        ProviderAllocation::Available(_) => ProviderStreamState::Available(Some(selected_provider_name.intern()), url.intern()),
+                        ProviderAllocation::GracePeriod(_) => ProviderStreamState::GracePeriod(Some(selected_provider_name.intern()), url.intern()),
                     }
                 }
             }
@@ -468,7 +468,7 @@ async fn create_stream_response_details(
     item_type: PlaylistItemType,
     share_stream: bool,
     connection_permission: UserConnectionPermission,
-    force_provider: Option<&str>,
+    force_provider: Option<&Arc<str>>,
 ) -> StreamDetails {
     let mut streaming_strategy = resolve_streaming_strategy(app_state, stream_url, fingerprint, input, force_provider).await;
     let config_grace_period_millis = app_state.app_config.config
@@ -591,9 +591,9 @@ where
         let extension = self.stream_ext.map_or_else(
             || {
                 extract_extension_from_url(url)
-                    .map_or_else(String::new, std::string::ToString::to_string)
+                    .map_or_else(String::new, ToString::to_string)
             },
-            std::string::ToString::to_string,
+            ToString::to_string,
         );
 
         // if there is an action_path (like for timeshift duration/start), it will be added in front of the stream_id
@@ -624,13 +624,13 @@ where
 
     if params.target_type == TargetType::M3u {
         if redirect_request || is_dash_request {
-            let redirect_url = if is_hls_request {
-                Cow::Owned(replace_url_extension(&provider_url, HLS_EXT))
+            let redirect_url: Arc<str> = if is_hls_request {
+                replace_url_extension(&provider_url, HLS_EXT).into()
             } else {
-                provider_url
+                provider_url.clone()
             };
             let redirect_url = if is_dash_request {
-                Cow::Owned(replace_url_extension(&redirect_url, DASH_EXT))
+                replace_url_extension(&redirect_url, DASH_EXT).into()
             } else {
                 redirect_url
             };
@@ -644,7 +644,7 @@ where
         }
     } else if params.target_type == TargetType::Xtream {
         let Some(provider_id) = params.provider_id else {
-            return Some(axum::http::StatusCode::BAD_REQUEST.into_response());
+            return Some(StatusCode::BAD_REQUEST.into_response());
         };
 
         if redirect_request {
@@ -673,7 +673,7 @@ where
             ) {
                 None => {
                     error!("Can't find stream url for target {target_name}, context {}, stream_id {virtual_id}", params.req_context);
-                    return Some(axum::http::StatusCode::BAD_REQUEST.into_response());
+                    return Some(StatusCode::BAD_REQUEST.into_response());
                 }
                 Some(url) => {
                     match app_state
@@ -684,7 +684,7 @@ where
                         Some(provider_cfg) => {
                             get_stream_alternative_url(&url, params.input, &provider_cfg)
                         }
-                        None => url,
+                        None => url.to_string(),
                     }
                 }
             };
@@ -812,15 +812,15 @@ pub async fn force_provider_stream_response(
     if let (Some(stream), _stream_info) = create_channel_unavailable_stream(
         &app_state.app_config,
         &[],
-        axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        StatusCode::SERVICE_UNAVAILABLE,
     ) {
         app_state.connection_manager.update_stream_detail(&fingerprint.addr, CustomVideoStreamType::ChannelUnavailable).await;
         debug!("Streaming custom stream");
         try_unwrap_body!(axum::response::Response::builder()
-            .status(axum::http::StatusCode::OK)
+            .status(StatusCode::OK)
             .body(axum::body::Body::from_stream(stream)))
     } else {
-        axum::http::StatusCode::BAD_REQUEST.into_response()
+        StatusCode::BAD_REQUEST.into_response()
     }
 }
 
@@ -933,7 +933,7 @@ pub async fn stream_response(
                 }
                 try_unwrap_body!(response.body(axum::body::Body::from_stream(broadcast_stream)))
             } else {
-                axum::http::StatusCode::BAD_REQUEST.into_response()
+                StatusCode::BAD_REQUEST.into_response()
             }
         } else {
             // Previously, we would always check if the provider redirected the request.
@@ -1010,7 +1010,7 @@ pub async fn stream_response(
         return stream_resp.into_response();
     }
     app_state.connection_manager.release_provider_handle(stream_details.provider_handle).await;
-    axum::http::StatusCode::BAD_REQUEST.into_response()
+    StatusCode::BAD_REQUEST.into_response()
 }
 
 fn get_stream_throttle(app_state: &Arc<AppState>) -> u64 {
@@ -1048,7 +1048,7 @@ async fn try_shared_stream_response_if_any(
         {
             let (status_code, header_map) = get_stream_response_with_headers(Some((
                 headers.clone(),
-                axum::http::StatusCode::OK,
+                StatusCode::OK,
             )));
             let mut stream_details = StreamDetails::from_stream(stream);
 
@@ -1252,7 +1252,7 @@ fn get_add_cache_content(
     add_cache_content
 }
 
-fn get_mime_type(headers: &axum::http::HeaderMap, resource_url: &str) -> Option<String> {
+fn get_mime_type(headers: &HeaderMap, resource_url: &str) -> Option<String> {
     headers
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())   // Option<&str>
@@ -1275,7 +1275,7 @@ async fn build_resource_stream_response(
     let mut response_builder =
         axum::response::Response::builder().status(status);
     let mime_type = get_mime_type(response.headers(), resource_url);
-    let has_content_range = response.headers().contains_key(axum::http::header::CONTENT_RANGE);
+    let has_content_range = response.headers().contains_key(header::CONTENT_RANGE);
     for (key, value) in response.headers() {
         let name = key.as_str();
         let is_hop_by_hop = matches!(
@@ -1297,7 +1297,7 @@ async fn build_resource_stream_response(
         .bytes_stream()
         .map_err(|err| StreamError::reqwest(&err));
     // Cache only complete responses (200 OK without Content-Range)
-    let can_cache = status == axum::http::StatusCode::OK && !has_content_range;
+    let can_cache = status == StatusCode::OK && !has_content_range;
     if can_cache {
         debug!( "Caching eligible resource stream {sanitized_resource_url}");
         let cache_resource_path = if let Some(cache) = app_state.cache.load().as_ref() {
@@ -1437,7 +1437,7 @@ pub async fn resource_response(
     input: Option<&ConfigInput>,
 ) -> impl IntoResponse + Send {
     if resource_url.is_empty() {
-        return axum::http::StatusCode::NO_CONTENT.into_response();
+        return StatusCode::NO_CONTENT.into_response();
     }
     let filter: HeaderFilter = Some(Box::new(|key| {
         key != "if-none-match" && key != "if-modified-since"
@@ -1462,10 +1462,10 @@ pub async fn resource_response(
             return resp;
         }
         // Upstream failure after retries
-        return axum::http::StatusCode::BAD_GATEWAY.into_response();
+        return StatusCode::BAD_GATEWAY.into_response();
     }
     error!("Url is malformed {}", sanitize_sensitive_info(resource_url));
-    axum::http::StatusCode::BAD_REQUEST.into_response()
+    StatusCode::BAD_REQUEST.into_response()
 }
 
 pub fn separate_number_and_remainder(input: &str) -> (String, Option<String>) {
@@ -1482,8 +1482,8 @@ pub fn separate_number_and_remainder(input: &str) -> (String, Option<String>) {
 /// # Panics
 pub fn empty_json_list_response() -> axum::response::Response {
     try_unwrap_body!(axum::response::Response::builder()
-        .status(axum::http::StatusCode::OK)
-        .header(axum::http::header::CONTENT_TYPE, mime::APPLICATION_JSON.to_string())
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, mime::APPLICATION_JSON.to_string())
         .body("[]".to_owned()))
 }
 
@@ -1511,8 +1511,8 @@ pub fn get_username_from_auth_header(token: &str, app_state: &Arc<AppState>) -> 
 /// # Panics
 pub fn redirect(url: &str) -> impl IntoResponse {
     try_unwrap_body!(axum::response::Response::builder()
-        .status(axum::http::StatusCode::FOUND)
-        .header(axum::http::header::LOCATION, url)
+        .status(StatusCode::FOUND)
+        .header(header::LOCATION, url)
         .body(axum::body::Body::empty()))
 }
 
@@ -1539,15 +1539,15 @@ pub async fn is_seek_request(cluster: XtreamCluster, req_headers: &HeaderMap) ->
 pub fn bin_response<T: Serialize>(data: &T) -> impl IntoResponse + Send {
     match bin_serialize(data) {
         Ok(body) => (
-            [(axum::http::header::CONTENT_TYPE, CONTENT_TYPE_BIN)],
+            [(header::CONTENT_TYPE, CONTENT_TYPE_BIN)],
             body,
         ).into_response(),
-        Err(_) => axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
 pub fn json_response<T: Serialize>(data: &T) -> impl IntoResponse + Send {
-    (axum::http::StatusCode::OK, axum::Json(data)).into_response()
+    (StatusCode::OK, axum::Json(data)).into_response()
 }
 
 pub fn json_or_bin_response<T: Serialize>(accept: Option<&str>, data: &T) -> impl IntoResponse + Send {

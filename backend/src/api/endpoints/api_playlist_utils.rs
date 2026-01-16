@@ -10,6 +10,7 @@ use shared::model::{CommonPlaylistItem, InputType, M3uPlaylistItem, PlaylistCate
                     PlaylistGroup, PlaylistItemType, PlaylistResponseGroup, TargetType, XtreamCluster};
 use std::sync::Arc;
 use crate::api::api_utils::{json_or_bin_response};
+use shared::utils::interner_gc;
 
 fn group_playlist_items<T>(
     cluster: XtreamCluster,
@@ -164,6 +165,7 @@ pub(in crate::api::endpoints) async fn get_playlist(client: &reqwest::Client, cf
                 (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"error": error_strings.join(", ")}))).into_response()
             } else {
                 let (live, vod, series) = group_playlist_groups_by_cluster(result);
+                interner_gc();
                 let response = PlaylistCategoriesResponse {
                     live: Some(live),
                     vod: Some(vod),

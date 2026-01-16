@@ -69,17 +69,17 @@ pub fn BlockView(props: &BlockProps) -> Html {
         let (dto_title, show_type, is_batch) = match &block.instance {
             BlockInstance::Input(dto) => {
                 dto.aliases.as_ref().map_or(
-                    (dto.name.clone(), true, false),
+                    (dto.name.to_string(), true, false),
                     |a| {
                         if a.is_empty() {
-                            (dto.name.clone(), true, false)
+                            (dto.name.to_string(), true, false)
                         } else {
-                            (if dto.name.is_empty() {a[0].name.clone()} else {dto.name.clone()}, true, true)
+                            (if dto.name.is_empty() {a[0].name.to_string()} else {dto.name.to_string()}, true, true)
                         }
                     }
                 )
             },
-            BlockInstance::Target(dto) => (dto.name.clone(), true, false),
+            BlockInstance::Target(dto) => (dto.name.to_string(), true, false),
             BlockInstance::Output(_output) => {
                 (translate.t(&format!("SOURCE_EDITOR.BRICK_{}", block_type)), false, false)
             }
@@ -87,7 +87,7 @@ pub fn BlockView(props: &BlockProps) -> Html {
         if dto_title.is_empty() {
             (translate.t(&format!("SOURCE_EDITOR.BRICK_{}", block_type)), false, is_batch)
         } else {
-            (dto_title, show_type, is_batch)
+            (dto_title.to_string(), show_type, is_batch)
         }
     };
 

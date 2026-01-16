@@ -15,7 +15,7 @@ use chrono::{DateTime, Utc};
 use log::{error, info, warn};
 use shared::error::{string_to_io_error, to_io_error, TuliproxError};
 use shared::model::{MsgKind, PlaylistEntry, PlaylistGroup, ProxyUserStatus, SeriesStreamProperties, StreamProperties, VideoStreamProperties, XtreamCluster, XtreamPlaylistItem, XtreamSeriesInfo, XtreamVideoInfo, XtreamVideoInfoDoc};
-use shared::utils::{extract_extension_from_url, get_i64_from_serde_value, get_string_from_serde_value, sanitize_sensitive_info, StringInterner};
+use shared::utils::{extract_extension_from_url, get_i64_from_serde_value, get_string_from_serde_value, sanitize_sensitive_info, Internable};
 use std::collections::HashMap;
 use std::io::Error;
 use std::path::Path;
@@ -142,8 +142,7 @@ pub async fn get_xtream_stream_info(client: &reqwest::Client,
                                     error!("Failed to persist series info for input {}: {err}", &input.name);
                                 }
                             }
-                            let mut interner = StringInterner::new();
-                            if let Some(mut episodes) = parse_xtream_series_info(&pli.get_uuid(), &series_stream_props, &group, &series_name, input, &mut interner) {
+                            if let Some(mut episodes) = parse_xtream_series_info(&pli.get_uuid(), &series_stream_props, &group, &series_name, input) {
                                 let config = &app_state.app_config.config.load();
                                 match get_target_storage_path(config, target.name.as_str()) {
                                     None => {
@@ -151,7 +150,7 @@ pub async fn get_xtream_stream_info(client: &reqwest::Client,
                                     }
                                     Some(target_path) => {
                                         let mut in_memory_updates = Vec::new();
-                                        let mut provider_series: HashMap<String, Vec<ProviderEpisodeKey>> = HashMap::new();
+                                        let mut provider_series: HashMap<Arc<str>, Vec<ProviderEpisodeKey>> = HashMap::new();
                                         {
                                             let (mut target_id_mapping, _file_lock) = get_target_id_mapping(&app_state.app_config, &target_path).await;
                                             if let Some(parent_id) = pli.get_provider_id() {
@@ -160,7 +159,7 @@ pub async fn get_xtream_stream_info(client: &reqwest::Client,
                                                     episode.header.virtual_id = target_id_mapping.get_and_update_virtual_id(&episode.header.uuid, provider_id, episode.header.item_type, parent_id);
                                                     episode.header.category_id = category_id;
                                                     let episode_provider_id = episode.header.get_provider_id().unwrap_or(0);
-                                                    provider_series.entry(pli.get_uuid().to_string())
+                                                    provider_series.entry(pli.get_uuid().intern())
                                                         .or_default()
                                                         .push(ProviderEpisodeKey {
                                                             provider_id: episode_provider_id,
@@ -487,10 +486,10 @@ pub fn create_vod_info_from_item(target: &ConfigTarget, user: &ProxyUserCredenti
     doc.info.name.clone_from(name);
     doc.movie_data.stream_id = stream_id;
     doc.movie_data.name.clone_from(name);
-    doc.movie_data.added = added.to_string();
-    doc.movie_data.category_id = category_id.to_string();
+    doc.movie_data.added = added.intern();
+    doc.movie_data.category_id = category_id.intern();
     doc.movie_data.category_ids.push(category_id);
-    doc.movie_data.container_extension = extension;
+    doc.movie_data.container_extension = extension.intern();
     doc.movie_data.custom_sid = None;
 
     serde_json::to_string(&doc).unwrap_or(String::new())
@@ -631,7 +630,7 @@ async fn save_xtream_categories_to_file(col_path: &Path, categories: &[XtreamCat
     let col_path_buf = col_path.to_path_buf();
     let cat_entries: Vec<CategoryEntry> = categories.iter().map(|c| CategoryEntry {
         category_id: c.category_id,
-        category_name: shared::utils::intern(&c.category_name),
+        category_name: c.category_name.clone(),
         parent_id: 0,
     }).collect();
 

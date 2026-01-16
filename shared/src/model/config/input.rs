@@ -1,9 +1,9 @@
-use crate::utils::is_blank_optional_string;
+use crate::utils::{is_blank_optional_string, Internable};
 use crate::error::{TuliproxError, TuliproxErrorKind};
 use crate::model::{EpgConfigDto};
 use crate::utils::{is_false, is_true, default_as_true, get_credentials_from_url_str, get_trimmed_string,
                    sanitize_sensitive_info, trim_last_slash, deserialize_timestamp, is_zero_u16,
-                   serialize_option_vec_flow_map_items};
+                   serialize_option_vec_flow_map_items, arc_str_serde};
 use super::PanelApiConfigDto;
 use crate::{check_input_credentials, check_input_connections, info_err_res};
 
@@ -11,6 +11,7 @@ use enum_iterator::Sequence;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[macro_export]
 macro_rules! apply_batch_aliases {
@@ -20,7 +21,7 @@ macro_rules! apply_batch_aliases {
             None
         } else {
             if let Some(aliases) = $source.aliases.as_mut() {
-                let mut names = aliases.iter().map(|a| a.name.clone()).collect::<std::collections::HashSet<String>>();
+                let mut names = aliases.iter().map(|a| a.name.clone()).collect::<std::collections::HashSet<Arc<str>>>();
                 names.insert($source.name.clone());
 
                 for alias in $batch_aliases.into_iter() {
@@ -202,7 +203,8 @@ impl ConfigInputOptionsDto {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct StagedInputDto {
-    pub name: String,
+    #[serde(with = "arc_str_serde")]
+    pub name: Arc<str>,
     pub url: String,
     #[serde(default, skip_serializing_if = "is_blank_optional_string")]
     pub username: Option<String>,
@@ -242,7 +244,8 @@ impl StagedInputDto {
 pub struct ConfigInputAliasDto {
     #[serde(default, skip_serializing_if = "is_zero_u16")]
     pub id: u16,
-    pub name: String,
+    #[serde(with = "arc_str_serde")]
+    pub name: Arc<str>,
     pub url: String,
     #[serde(default, skip_serializing_if = "is_blank_optional_string")]
     pub username: Option<String>,
@@ -260,7 +263,7 @@ pub struct ConfigInputAliasDto {
 impl ConfigInputAliasDto {
     pub fn prepare(&mut self, index: u16, input_type: &InputType) -> Result<u16, TuliproxError> {
         self.id = index + 1;
-        self.name = self.name.trim().to_string();
+        self.name = self.name.trim().intern();
         if self.name.is_empty() {
             return info_err_res!("name for input is mandatory");
         }
@@ -280,8 +283,8 @@ impl ConfigInputAliasDto {
 pub struct ConfigInputDto {
     #[serde(default, skip_serializing_if = "is_zero_u16")]
     pub id: u16,
-    #[serde(default)]
-    pub name: String,
+    #[serde(with = "arc_str_serde")]
+    pub name: Arc<str>,
     #[serde(default, rename = "type")]
     pub input_type: InputType,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -324,7 +327,7 @@ impl Default for ConfigInputDto {
     fn default() -> Self {
         ConfigInputDto {
             id: 0,
-            name: String::new(),
+            name: "".intern(),
             input_type: InputType::default(),
             headers: HashMap::new(),
             url: String::new(),
@@ -351,7 +354,7 @@ impl ConfigInputDto {
     #[allow(clippy::cast_possible_truncation)]
     pub fn prepare(&mut self, index: u16, _include_computed: bool) -> Result<u16, TuliproxError> {
 
-        self.name = self.name.trim().to_owned();
+        self.name = self.name.trim().intern();
         if self.name.is_empty() {
             return info_err_res!("name for input is mandatory");
         }
@@ -481,8 +484,8 @@ impl ConfigInputDto {
         Ok(())
     }
 
-    pub fn update_account_expiration_date(&mut self, input_name: &str, username: &str, exp_date: i64) -> Result<(), TuliproxError> {
-        if self.name == input_name {
+    pub fn update_account_expiration_date(&mut self, input_name: &Arc<str>, username: &str, exp_date: i64) -> Result<(), TuliproxError> {
+        if &self.name == input_name {
             if let Some(input_username) = &self.username {
                 if input_username == username {
                     self.exp_date = Some(exp_date);

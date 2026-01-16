@@ -34,8 +34,10 @@ use log::{debug, error, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use shared::error::{info_err_res, info_err, TuliproxError};
-use shared::model::{create_stream_channel_with_type, PlaylistEntry, PlaylistItemType, ProxyType, TargetType, UserConnectionPermission, XtreamCluster, XtreamPlaylistItem};
-use shared::utils::{deserialize_as_string, extract_extension_from_url, generate_playlist_uuid, sanitize_sensitive_info, trim_slash, HLS_EXT};
+use shared::model::{create_stream_channel_with_type, PlaylistEntry, PlaylistItemType, ProxyType,
+                    TargetType, UserConnectionPermission, XtreamCluster, XtreamPlaylistItem};
+use shared::utils::{deserialize_as_string, extract_extension_from_url, generate_playlist_uuid,
+                    sanitize_sensitive_info, trim_slash, HLS_EXT};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -153,8 +155,8 @@ pub(in crate::api) fn get_xtream_player_api_stream_url(
     input: &ConfigInput,
     context: ApiStreamContext,
     action_path: &str,
-    fallback_url: &str,
-) -> Option<String> {
+    fallback_url: &Arc<str>,
+) -> Option<Arc<str>> {
     if let Some(input_user_info) = input.get_user_info() {
         let ctx = match context {
             ApiStreamContext::LiveAlt | ApiStreamContext::Live => {
@@ -176,9 +178,9 @@ pub(in crate::api) fn get_xtream_player_api_stream_url(
             trim_slash(action_path),
         ];
         parts.retain(|s| !s.is_empty());
-        Some(parts.join("/"))
+        Some(parts.join("/").into())
     } else if !fallback_url.is_empty() {
-        Some(String::from(fallback_url))
+        Some(fallback_url.clone())
     } else {
         None
     }
@@ -321,9 +323,9 @@ async fn xtream_player_api_stream(
                 .into_response();
         }
 
-        session.stream_url.as_str()
+        session.stream_url.clone()
     } else {
-        pli.url.as_str()
+        pli.url.clone()
     };
 
     let connection_permission = user.connection_permission(app_state).await;
@@ -356,7 +358,7 @@ async fn xtream_player_api_stream(
     let (query_path, extension) = get_query_path(stream_req.action_path, stream_ext.as_ref(), &pli, app_state);
 
     let stream_url = try_option_bad_request!(
-        get_xtream_player_api_stream_url(&input, stream_req.context, &query_path, session_url),
+        get_xtream_player_api_stream_url(&input, stream_req.context, &query_path, &session_url),
         true,
         format!(
             "Can't find stream url for target {target_name}, context {}, stream_id {virtual_id}",
@@ -532,7 +534,7 @@ async fn xtream_player_api_stream_with_token(
                 &input,
                 stream_req.context,
                 &query_path,
-                pli.url.as_str()
+                &pli.url
             ),
             true,
             format!(
@@ -802,7 +804,7 @@ async fn xtream_player_api_timeshift_query_stream(
         .into_response()
 }
 
-fn empty_json_response() -> axum::http::Result<axum::response::Response> {
+fn empty_json_response_as_object() -> axum::http::Result<axum::response::Response> {
     axum::response::Response::builder()
         .status(axum::http::StatusCode::OK)
         .header(
@@ -811,6 +813,17 @@ fn empty_json_response() -> axum::http::Result<axum::response::Response> {
         )
         .body(axum::body::Body::from("{}".as_bytes()))
 }
+
+fn empty_json_response_as_array() -> axum::http::Result<axum::response::Response> {
+    axum::response::Response::builder()
+        .status(axum::http::StatusCode::OK)
+        .header(
+            axum::http::header::CONTENT_TYPE,
+            mime::APPLICATION_JSON.to_string(),
+        )
+        .body(axum::body::Body::from("[]".as_bytes()))
+}
+
 
 async fn xtream_get_stream_info_response(
     app_state: &Arc<AppState>,
@@ -821,7 +834,7 @@ async fn xtream_get_stream_info_response(
 ) -> impl IntoResponse + Send {
     let virtual_id: u32 = match FromStr::from_str(stream_id) {
         Ok(id) => id,
-        Err(_) => return axum::http::StatusCode::BAD_REQUEST.into_response(),
+        Err(_) => return try_unwrap_body!(empty_json_response_as_array()),
     };
 
     if let Ok(pli) = xtream_repository::xtream_get_item_for_stream_id(
@@ -832,7 +845,7 @@ async fn xtream_get_stream_info_response(
     ).await {
         if pli.item_type.is_local() {
             let Ok(xtream_output) = target.get_xtream_output().ok_or_else(|| info_err!("Unexpected: xtream output required for target {}", target.name)) else {
-                return try_unwrap_body!(empty_json_response());
+                return try_unwrap_body!(empty_json_response_as_array());
             };
 
             let server_info = app_state.app_config.get_user_server_info(user);
@@ -883,17 +896,11 @@ async fn xtream_get_stream_info_response(
                     .body(axum::body::Body::from(content)))
             }
             XtreamCluster::Live | XtreamCluster::Series => {
-                try_unwrap_body!(axum::response::Response::builder()
-                    .status(axum::http::StatusCode::OK)
-                    .header(
-                        axum::http::header::CONTENT_TYPE,
-                        mime::APPLICATION_JSON.to_string()
-                    )
-                    .body(axum::body::Body::from("{}".as_bytes())))
+                try_unwrap_body!(empty_json_response_as_array())
             }
         };
     }
-    try_unwrap_body!(empty_json_response())
+    try_unwrap_body!(empty_json_response_as_object())
 }
 
 async fn xtream_get_short_epg(
@@ -907,7 +914,7 @@ async fn xtream_get_short_epg(
     if target.has_output(TargetType::Xtream) {
         let virtual_id: u32 = match FromStr::from_str(stream_id.trim()) {
             Ok(id) => id,
-            Err(_) => return axum::http::StatusCode::BAD_REQUEST.into_response(),
+            Err(_) =>  return  get_empty_epg_response().into_response(),
         };
 
         if let Ok(pli) = xtream_repository::xtream_get_item_for_stream_id(
@@ -920,7 +927,7 @@ async fn xtream_get_short_epg(
             if let Some(epg_path) = get_epg_path_for_target(config, target) {
                 if let Ok(exists) = tokio::fs::try_exists(&epg_path).await {
                     if exists {
-                        return serve_epg(app_state, &epg_path, user, target, pli.epg_channel_id.clone()).await;
+                        return serve_epg(app_state, &epg_path, user, target, pli.epg_channel_id).await;
                     }
                 }
             }
@@ -1292,7 +1299,7 @@ async fn xtream_player_api(
                 )
                 .await
             ),
-            _ => Some(info_err_res!("Can't find content: {action} for target: {}", &target.name)),
+            _ => Some(info_err_res!("Unkown api call: {action} for target: {}", &target.name)),
         };
 
         match result {

@@ -150,7 +150,7 @@ pub async fn serve_epg(
     epg_path: &Path,
     user: &ProxyUserCredentials,
     target: &Arc<ConfigTarget>,
-    filter: Option<String>,
+    filter: Option<Arc<str>>,
 ) -> axum::response::Response {
     if let Ok(exists) = tokio::fs::try_exists(epg_path).await {
         if exists {
@@ -188,7 +188,7 @@ async fn serve_epg_with_rewrites(
     rewrite_urls: bool,
     secret: &[u8; 16],
     base_url: &str,
-    filter: Option<String>,
+    filter: Option<Arc<str>>,
 ) -> axum::response::Response {
     match tokio::fs::try_exists(epg_path).await {
         Ok(exists) => {
@@ -256,14 +256,14 @@ async fn serve_epg_with_rewrites(
                                                 .filter_map(Result::ok)
                                                 .find(|a| a.key.as_ref() == b"id")
                                                 .and_then(|a| a.unescape_value().ok())
-                                                .is_some_and(|v| !flt.eq(v.as_ref()))
+                                                .is_some_and(|v| !(**flt).eq(v.as_ref()))
                                         }
                                         b"programme" => {
                                             e.attributes()
                                                 .filter_map(Result::ok)
                                                 .find(|a| a.key.as_ref() == b"channel")
                                                 .and_then(|a| a.unescape_value().ok())
-                                                .is_some_and(|v| !flt.eq(v.as_ref()))
+                                                .is_some_and(|v| !(**flt).eq(v.as_ref()))
                                         }
                                         _ => false,
                                     };
@@ -446,7 +446,6 @@ async fn xmltv_api(
     serve_epg(&app_state, &epg_path, &user, &target, None).await
 }
 
-#[axum::debug_handler]
 async fn epg_api_resource(
     req_headers: axum::http::HeaderMap,
     axum::extract::Query(api_req): axum::extract::Query<UserApiRequest>,

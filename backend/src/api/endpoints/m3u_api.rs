@@ -189,9 +189,9 @@ async fn m3u_api_stream(
             .await
             .into_response();
         }
-        session.stream_url.as_str()
+        session.stream_url.clone()
     } else {
-        pli.url.as_str()
+        pli.url.clone()
     };
 
     let connection_permission = user.connection_permission(app_state).await;
@@ -252,7 +252,7 @@ async fn m3u_api_stream(
         app_state,
         &session_key,
         pli.to_stream_channel(target.id),
-        session_url,
+        &session_url,
         req_headers,
         &input,
         &target,

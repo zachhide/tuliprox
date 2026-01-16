@@ -4,7 +4,7 @@ use axum::Router;
 use log::error;
 use serde_json::json;
 use shared::model::{InputType, PlaylistEpgRequest, PlaylistRequest, WebplayerUrlRequest};
-use shared::utils::sanitize_sensitive_info;
+use shared::utils::{sanitize_sensitive_info, Internable};
 use crate::api::endpoints::api_playlist_utils::{get_playlist, get_playlist_for_target};
 use crate::api::model::AppState;
 use crate::auth::create_access_token;
@@ -17,7 +17,7 @@ use crate::api::endpoints::extract_accept_header::ExtractAcceptHeader;
 fn create_config_input_for_m3u(url: &str) -> ConfigInput {
     ConfigInput {
         id: 0,
-        name: String::from("m3u_req"),
+        name: "m3u_req".intern(),
         input_type: InputType::M3u,
         url: String::from(url),
         enabled: true,
@@ -35,7 +35,7 @@ fn create_config_input_for_m3u(url: &str) -> ConfigInput {
 fn create_config_input_for_xtream(username: &str, password: &str, host: &str) -> ConfigInput {
     ConfigInput {
         id: 0,
-        name: String::from("xc_req"),
+        name: "xc_req".intern(),
         input_type: InputType::Xtream,
         url: String::from(host),
         username: Some(String::from(username)),

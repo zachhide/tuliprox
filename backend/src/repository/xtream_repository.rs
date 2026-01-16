@@ -20,7 +20,7 @@ use serde_json::{json, Value};
 use shared::error::{info_err_res, info_err, notify_err, string_to_io_error, TuliproxError};
 use shared::model::xtream_const::XTREAM_CLUSTER;
 use shared::model::{PlaylistGroup, PlaylistItem, PlaylistItemType, SeriesStreamProperties, StreamProperties, VideoStreamProperties, XtreamCluster, XtreamPlaylistItem};
-use shared::utils::{arc_str_serde, get_u32_from_serde_value, intern, StringInterner};
+use shared::utils::{arc_str_serde, get_u32_from_serde_value, Internable};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Error, ErrorKind};
@@ -174,7 +174,7 @@ pub type CategoryKey = (XtreamCluster, Arc<str>);
 
 // Because interner is not thread safe we can't use it currently for interning.
 // We leave the argument for later optimizations.
-async fn load_old_category_ids(path: &Path, _interner: &mut StringInterner) -> (u32, HashMap<CategoryKey, u32>) {
+async fn load_old_category_ids(path: &Path) -> (u32, HashMap<CategoryKey, u32>) {
     let old_path = path.to_path_buf();
     tokio::task::spawn_blocking(move || {
         let mut result: HashMap<CategoryKey, u32> = HashMap::new();
@@ -195,7 +195,7 @@ async fn load_old_category_ids(path: &Path, _interner: &mut StringInterner) -> (
                                     if let Some(category_id) = entry.get(crate::model::XC_TAG_CATEGORY_ID).and_then(get_u32_from_serde_value) {
                                         if let Value::Object(item) = entry {
                                             if let Some(category_name) = get_map_item_as_str(&item, crate::model::XC_TAG_CATEGORY_NAME) {
-                                                result.insert((cluster, /*interner.*/intern(&category_name)), category_id);
+                                                result.insert((cluster, /*interner.*/category_name.intern()), category_id);
                                                 max_id = max_id.max(category_id);
                                             }
                                         }
@@ -242,7 +242,6 @@ pub async fn xtream_write_playlist(
     app_cfg: &Arc<AppConfig>,
     target: &ConfigTarget,
     playlist: &mut [PlaylistGroup],
-    interner: &mut StringInterner,
 ) -> Result<(), TuliproxError> {
     let path = {
         let config = app_cfg.config.load();
@@ -256,7 +255,7 @@ pub async fn xtream_write_playlist(
     let mut series_col = Vec::with_capacity(50_000);
     let mut vod_col = Vec::with_capacity(50_000);
 
-    let categories = create_categories(playlist, &path, interner).await;
+    let categories = create_categories(playlist, &path).await;
     {
         for (xtream_cluster, category) in categories {
             match xtream_cluster {
@@ -320,15 +319,15 @@ pub async fn xtream_write_playlist(
     Ok(())
 }
 
-async fn create_categories(playlist: &mut [PlaylistGroup], path: &Path, interner: &mut StringInterner) -> Vec<(XtreamCluster, CategoryEntry)> {
+async fn create_categories(playlist: &mut [PlaylistGroup], path: &Path) -> Vec<(XtreamCluster, CategoryEntry)> {
     // preserve category_ids
-    let (max_cat_id, existing_cat_ids) = load_old_category_ids(path, interner).await;
+    let (max_cat_id, existing_cat_ids) = load_old_category_ids(path).await;
     let mut cat_id_counter = max_cat_id;
 
     let mut new_categories: IndexMap<CategoryKey, CategoryEntry> = IndexMap::new();
 
     let mut last_cluster: Option<XtreamCluster> = None;
-    let mut last_group = intern("");
+    let mut last_group = "".intern();
     let mut last_category_id: u32 = 0;
 
     for plg in playlist.iter_mut() {
@@ -930,7 +929,7 @@ pub async fn load_input_xtream_playlist(app_config: &Arc<AppConfig>, storage_pat
                     groups.entry((cluster, cat_id))
                         .or_insert_with(|| PlaylistGroup {
                             id: cat_id,
-                            title: intern("Unknown"),
+                            title: "Unknown".intern(),
                             channels: Vec::new(),
                             xtream_cluster: cluster,
                         })

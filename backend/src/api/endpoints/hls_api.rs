@@ -21,7 +21,7 @@ use axum::response::IntoResponse;
 use log::{debug, error};
 use serde::Deserialize;
 use shared::model::{PlaylistItemType, StreamChannel, TargetType, UserConnectionPermission, XtreamCluster};
-use shared::utils::{intern, is_hls_url, replace_url_extension, sanitize_sensitive_info, CUSTOM_VIDEO_PREFIX, HLS_EXT};
+use shared::utils::{is_hls_url, replace_url_extension, sanitize_sensitive_info, Internable, CUSTOM_VIDEO_PREFIX, HLS_EXT};
 use std::sync::Arc;
 
 const PLAYLIST_TEMPLATE: &str = r"#EXTM3U
@@ -187,8 +187,9 @@ async fn resolve_stream_channel(
     app_state: &Arc<AppState>,
     target: &Arc<ConfigTarget>,
     virtual_id: u32,
-    hls_url: &str,
+    hls_url: &Arc<str>,
 ) -> StreamChannel {
+    let unknown = "Unknown".intern();
     let mut channel = match get_stream_channel(app_state, target, virtual_id).await {
         Some(channel) => channel,
         None => StreamChannel {
@@ -197,9 +198,9 @@ async fn resolve_stream_channel(
             provider_id: 0,
             item_type: PlaylistItemType::LiveHls,
             cluster: XtreamCluster::Live,
-            group: intern("Unknown"),
-            title: "Unknown".to_string(),
-            url: hls_url.to_string(),
+            group: unknown.clone(),
+            title: unknown,
+            url: hls_url.clone(),
             shared: false,
         },
     };
@@ -272,8 +273,8 @@ async fn hls_api_stream(
             Some((Some(session_token), hls_url)) if session.token.eq(&session_token) => hls_url,
             _ => return axum::http::StatusCode::BAD_REQUEST.into_response(),
         };
-
-        session.stream_url.clone_from(&hls_url);
+        let hls_url = hls_url.intern();
+        session.stream_url = hls_url.clone();
         if session.virtual_id == virtual_id {
             let stream_channel = resolve_stream_channel(&app_state, &target, virtual_id, &hls_url).await;
             if is_seek_request(stream_channel.cluster, &req_headers).await {

@@ -9,7 +9,7 @@ use crate::utils::ip_checker::get_ips;
 use crate::{VERSION};
 use axum::response::IntoResponse;
 use shared::model::{default_geoip_url, InputFetchMethod, IpCheckDto, StatusCheck};
-use shared::utils::{concat_path_leading_slash};
+use shared::utils::{concat_path_leading_slash, Internable};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Cursor};
 use std::sync::Arc;
@@ -83,7 +83,7 @@ async fn geoip_update(axum::extract::State(app_state): axum::extract::State<Arc<
 
             let url = if geoip.url.trim().is_empty() { default_geoip_url() } else { geoip.url.clone() };
             let input_source =  InputSource {
-                name: String::from("GeoIP"),
+                name: "GeoIP".intern(),
                 url,
                 username: None,
                 password: None,

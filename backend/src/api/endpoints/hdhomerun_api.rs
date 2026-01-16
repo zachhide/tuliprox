@@ -2,6 +2,7 @@ use crate::api::api_utils::try_unwrap_body;
 use crate::api::model::HdHomerunAppState;
 use crate::auth::AuthBasic;
 use crate::model::{AppConfig, ConfigTarget, ProxyUserCredentials};
+use crate::utils::arc_str_serde;
 use crate::processing::parser::xtream::get_xtream_url;
 use crate::repository::m3u_playlist_iterator::M3uPlaylistIterator;
 use crate::repository::m3u_repository;
@@ -20,12 +21,12 @@ use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Lineup {
-    #[serde(rename = "GuideNumber")]
-    guide_number: String,
-    #[serde(rename = "GuideName")]
-    guide_name: String,
-    #[serde(rename = "URL")]
-    url: String,
+    #[serde(with = "arc_str_serde", rename = "GuideNumber")]
+    guide_number: Arc<str>,
+    #[serde(with = "arc_str_serde", rename = "GuideName")]
+    guide_name: Arc<str>,
+    #[serde(with = "arc_str_serde", rename = "URL")]
+    url: Arc<str>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -124,13 +125,13 @@ where
                         container_extension.as_deref(),
                         live_stream_use_prefix,
                         live_stream_without_extension,
-                    ),
+                    ).into(),
                 };
 
                 let lineup = Lineup {
-                    guide_number: item.epg_channel_id.unwrap_or(item.name).clone(),
+                    guide_number: item.epg_channel_id.unwrap_or(item.name.clone()),
                     guide_name: item.title.clone(),
-                    url: stream_url,
+                    url: stream_url.clone(),
                 };
                 match serde_json::to_string(&lineup) {
                     Ok(mut content) => {
@@ -156,14 +157,13 @@ where
         Some(chans) => {
             let mapped = chans.map(move |(item, has_next)| {
                 let lineup = Lineup {
-                    guide_number: item.epg_channel_id.unwrap_or(item.name).clone(),
+                    guide_number: item.epg_channel_id.clone().unwrap_or(item.name.clone()),
                     guide_name: item.title.clone(),
-                    url: (if item.t_stream_url.is_empty() {
-                        &item.url
+                    url: if item.t_stream_url.is_empty() {
+                        item.url.clone()
                     } else {
-                        &item.t_stream_url
-                    })
-                        .clone(),
+                        item.t_stream_url.clone()
+                    }
                 };
                 match serde_json::to_string(&lineup) {
                     Ok(mut content) => {
