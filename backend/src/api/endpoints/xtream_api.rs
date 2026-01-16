@@ -1,7 +1,7 @@
 // https://github.com/tellytv/go.xtream-codes/blob/master/structs.go
 // Xtream api -> https://9tzx6f0ozj.apidog.io/
 use crate::api::api_utils;
-use crate::api::api_utils::{create_session_fingerprint, local_stream_response, try_unwrap_body};
+use crate::api::api_utils::{create_api_proxy_user, create_session_fingerprint, local_stream_response, try_unwrap_body};
 use crate::api::api_utils::{
     force_provider_stream_response, get_user_target, get_user_target_by_credentials,
     is_seek_request, redirect_response, resource_response, separate_number_and_remainder,
@@ -468,28 +468,7 @@ async fn xtream_player_api_stream_with_token(
             )
         );
 
-        let config = app_state.app_config.config.load();
-
-        let server = config
-            .web_ui
-            .as_ref()
-            .and_then(|web_ui| web_ui.player_server.as_ref())
-            .map_or("default", |server_name| server_name.as_str());
-
-        let user = ProxyUserCredentials {
-            username: "api_user".to_string(),
-            password: "api_user".to_string(),
-            token: None,
-            proxy: ProxyType::Reverse(None),
-            server: Some(server.to_string()),
-            epg_timeshift: None,
-            created_at: None,
-            exp_date: None,
-            max_connections: 0,
-            status: None,
-            ui_enabled: false,
-            comment: None,
-        };
+        let user = create_api_proxy_user(app_state);
 
         if pli.item_type.is_local() {
             return local_stream_response(fingerprint,
@@ -825,7 +804,7 @@ fn empty_json_response_as_array() -> axum::http::Result<axum::response::Response
 }
 
 
-async fn xtream_get_stream_info_response(
+pub async fn xtream_get_stream_info_response(
     app_state: &Arc<AppState>,
     user: &ProxyUserCredentials,
     target: &Arc<ConfigTarget>,

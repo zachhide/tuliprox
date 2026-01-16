@@ -2062,7 +2062,7 @@ where
     where
         SortKey: for<'de> Deserialize<'de>,
     {
-        super::sorted_index::BPlusTreeSortedIteratorOwned::new_hybrid(self.filepath.clone(), self.file, self.mmap)
+        super::sorted_index::BPlusTreeSortedIteratorOwned::<K, V, SortKey>::new_hybrid(self.filepath.clone(), self.file, self.mmap)
     }
 
     /// Owned iterator with explicit index path.
@@ -2070,7 +2070,7 @@ where
     where
         SortKey: for<'de> Deserialize<'de>,
     {
-        super::sorted_index::BPlusTreeSortedIteratorOwned::with_index_path_hybrid(self.filepath.clone(), self.file, self.mmap, index_path)
+        super::sorted_index::BPlusTreeSortedIteratorOwned::<K, V, SortKey>::with_index_path_hybrid(self.filepath.clone(), self.file, self.mmap, index_path)
     }
 
     /// Traverses the tree and calls the provided closure for each leaf's keys and values.

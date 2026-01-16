@@ -259,13 +259,16 @@ async fn save_xtream_user_bouquet_for_target(config: &Config, target_name: &str,
     if let Some(bouquet_categories) = bouquet {
         if let Some(xtream_categories) = xtream_get_playlist_categories(config, target_name, cluster).await {
             let filtered: Vec<PlaylistXtreamCategory> = xtream_categories.iter().filter(|p| bouquet_categories.contains(&p.name)).cloned().collect();
+            if filtered.is_empty() {
+                if tokio::fs::try_exists(&bouquet_path).await.is_ok_and(|r| r) {
+                    tokio::fs::remove_file(bouquet_path).await?;
+                }
+            } else {
                 json_write_documents_to_file(&bouquet_path, &filtered).await.map_err(|err| Error::other(format!("Failed to write xtream bouquet file: {err}")))?;
+            }
         }
     }
 
-    if bouquet_path.exists() {
-        tokio::fs::remove_file(bouquet_path).await?;
-    }
     Ok(())
 }
 
@@ -402,7 +405,7 @@ pub async fn user_get_bouquet_filter(config: &Config, username: &str, category_i
                 // xtream filter has PlaylistXtreamCategory
                 serde_json::from_str::<Vec<PlaylistXtreamCategory>>(&bouquet_categories)
                     .ok()
-                    .map(|v| v.into_iter().map(|c| c.id).collect())
+                    .map(|v| v.into_iter().map(|c| c.name.clone()).collect())
             } else {
                 // m3u filter has only group names
                 serde_json::from_str::<Vec<String>>(&bouquet_categories).ok()

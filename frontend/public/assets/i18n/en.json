@@ -391,7 +391,8 @@
     "AUTO": "Auto",
     "API_USER_AGENT": "User Agent",
     "ADVANCED": "Advanced",
-    "TRAKT": "Trakt"
+    "TRAKT": "Trakt",
+    "SEASON": "Season"
   },
   "TITLE": {
     "USER_BOUQUET_EDITOR": "Playlist Category Selection"

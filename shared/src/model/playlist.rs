@@ -233,6 +233,15 @@ impl PlaylistItemType {
             Self::Catchup => Self::CATCHUP,
         }
     }
+
+    pub fn is_cluster(&self, cluster: XtreamCluster) -> bool {
+        match self {
+            Self::Live | Self::LiveHls | Self::LiveDash | Self::LiveUnknown => cluster == XtreamCluster::Live,
+            Self::Catchup | Self::Video | Self::LocalVideo => cluster == XtreamCluster::Video,
+            Self::Series | Self::LocalSeries
+            | Self::SeriesInfo | Self::LocalSeriesInfo => cluster == XtreamCluster::Series,
+        }
+    }
 }
 
 impl Display for PlaylistItemType {

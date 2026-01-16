@@ -1,9 +1,9 @@
 use crate::model::info_doc_utils::InfoDocUtils;
-use crate::model::{PlaylistEntry, XtreamSeriesInfo, XtreamVideoInfo};
-use crate::utils::{deserialize_as_string_array, deserialize_json_as_opt_string, serialize_json_as_opt_string,
-                   deserialize_number_from_string, deserialize_number_from_string_or_zero,
-                   serialize_option_string_as_null_if_empty, arc_str_default_on_null, arc_str_none_default_on_null,
-                   deserialize_as_option_arc_str, deserialize_as_option_arc_str_none, arc_str_option_serde_none, Internable};
+use crate::model::{PlaylistEntry, XtreamSeriesInfo, XtreamSeriesInfoDoc, XtreamVideoInfo};
+use crate::utils::{arc_str_default_on_null, arc_str_none_default_on_null, arc_str_option_serde_none,
+                   deserialize_as_option_arc_str, deserialize_as_option_arc_str_none,
+                   deserialize_as_string_array, deserialize_json_as_opt_string, deserialize_number_from_string,
+                   deserialize_number_from_string_or_zero, serialize_json_as_opt_string, serialize_option_string_as_null_if_empty, Internable};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -19,7 +19,11 @@ pub struct LiveStreamProperties {
     pub stream_icon: Arc<str>,
     #[serde(default, deserialize_with = "arc_str_none_default_on_null")]
     pub direct_source: Arc<str>,
-    #[serde(default, deserialize_with = "deserialize_as_option_arc_str_none", serialize_with = "serialize_option_string_as_null_if_empty")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_as_option_arc_str_none",
+        serialize_with = "serialize_option_string_as_null_if_empty"
+    )]
     pub custom_sid: Option<Arc<str>>,
     #[serde(default, deserialize_with = "deserialize_as_option_arc_str_none")]
     pub added: Option<Arc<str>>,
@@ -77,9 +81,17 @@ pub struct VideoStreamDetailProperties {
     pub duration_secs: Option<Arc<str>>,
     #[serde(default, with = "arc_str_option_serde_none")]
     pub duration: Option<Arc<str>>,
-    #[serde(default, serialize_with = "serialize_json_as_opt_string", deserialize_with = "deserialize_json_as_opt_string")]
+    #[serde(
+        default,
+        serialize_with = "serialize_json_as_opt_string",
+        deserialize_with = "deserialize_json_as_opt_string"
+    )]
     pub video: Option<Arc<str>>,
-    #[serde(default, serialize_with = "serialize_json_as_opt_string", deserialize_with = "deserialize_json_as_opt_string")]
+    #[serde(
+        default,
+        serialize_with = "serialize_json_as_opt_string",
+        deserialize_with = "deserialize_json_as_opt_string"
+    )]
     pub audio: Option<Arc<str>>,
     #[serde(default)]
     pub bitrate: u32,
@@ -101,7 +113,11 @@ pub struct VideoStreamProperties {
     pub stream_icon: Arc<str>,
     #[serde(default, deserialize_with = "arc_str_none_default_on_null")]
     pub direct_source: Arc<str>,
-    #[serde(default, deserialize_with = "deserialize_as_option_arc_str_none", serialize_with = "serialize_option_string_as_null_if_empty")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_as_option_arc_str_none",
+        serialize_with = "serialize_option_string_as_null_if_empty"
+    )]
     pub custom_sid: Option<Arc<str>>,
     #[serde(default, deserialize_with = "arc_str_none_default_on_null")]
     pub added: Arc<str>,
@@ -157,7 +173,11 @@ pub struct SeriesStreamDetailEpisodeProperties {
     pub title: Arc<str>,
     #[serde(default, deserialize_with = "arc_str_default_on_null")]
     pub container_extension: Arc<str>,
-    #[serde(default, deserialize_with = "deserialize_as_option_arc_str_none", serialize_with = "serialize_option_string_as_null_if_empty")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_as_option_arc_str_none",
+        serialize_with = "serialize_option_string_as_null_if_empty"
+    )]
     pub custom_sid: Option<Arc<str>>,
     #[serde(default, deserialize_with = "arc_str_none_default_on_null")]
     pub added: Arc<str>,
@@ -181,9 +201,17 @@ pub struct SeriesStreamDetailEpisodeProperties {
     pub bitrate: u32,
     #[serde(default, deserialize_with = "deserialize_number_from_string")]
     pub rating: Option<f64>,
-    #[serde(default, serialize_with = "serialize_json_as_opt_string", deserialize_with = "deserialize_json_as_opt_string")]
+    #[serde(
+        default,
+        serialize_with = "serialize_json_as_opt_string",
+        deserialize_with = "deserialize_json_as_opt_string"
+    )]
     pub video: Option<Arc<str>>,
-    #[serde(default, serialize_with = "serialize_json_as_opt_string", deserialize_with = "deserialize_json_as_opt_string")]
+    #[serde(
+        default,
+        serialize_with = "serialize_json_as_opt_string",
+        deserialize_with = "deserialize_json_as_opt_string"
+    )]
     pub audio: Option<Arc<str>>,
 }
 
@@ -253,9 +281,17 @@ pub struct EpisodeStreamProperties {
     pub movie_image: Arc<str>,
     #[serde(default, deserialize_with = "arc_str_default_on_null")]
     pub container_extension: Arc<str>,
-    #[serde(default, serialize_with = "serialize_json_as_opt_string", deserialize_with = "deserialize_json_as_opt_string")]
+    #[serde(
+        default,
+        serialize_with = "serialize_json_as_opt_string",
+        deserialize_with = "deserialize_json_as_opt_string"
+    )]
     pub video: Option<Arc<str>>,
-    #[serde(default, serialize_with = "serialize_json_as_opt_string", deserialize_with = "deserialize_json_as_opt_string")]
+    #[serde(
+        default,
+        serialize_with = "serialize_json_as_opt_string",
+        deserialize_with = "deserialize_json_as_opt_string"
+    )]
     pub audio: Option<Arc<str>>,
 }
 
@@ -707,6 +743,72 @@ impl SeriesStreamProperties {
                     episodes.sort_by_key(|episode| (episode.season, episode.episode_num));
                     episodes
                 }),
+            }),
+        }
+    }
+
+    pub fn from_info_doc(info: &XtreamSeriesInfoDoc, series_id: u32) -> SeriesStreamProperties {
+        SeriesStreamProperties {
+            name: info.info.name.clone(),
+            category_id: info.info.category_id.parse::<u32>().unwrap_or(0),
+            series_id,
+            backdrop_path: Some(info.info.backdrop_path.clone()),
+            cast: info.info.cast.clone(),
+            cover: info.info.cover.clone(),
+            director: info.info.director.clone(),
+            episode_run_time: Some(info.info.episode_run_time.clone()),
+            genre: Some(info.info.genre.clone()),
+            last_modified: Some(info.info.last_modified.clone()),
+            plot: Some(info.info.plot.clone()),
+            rating: info.info.rating.parse::<f64>().unwrap_or(0.0),
+            rating_5based: info.info.rating_5based.parse::<f64>().unwrap_or(0.0),
+            release_date: Some(info.info.release_date.clone()),
+            youtube_trailer: info.info.youtube_trailer.clone(),
+            tmdb: info.info.tmdb.parse::<u32>().ok(),
+            details: Some(SeriesStreamDetailProperties {
+                year: InfoDocUtils::extract_year_from_release_date(&info.info.release_date),
+                seasons: {
+                    let mut seasons: Vec<SeriesStreamDetailSeasonProperties> = info.seasons.iter().map(|s|
+                        SeriesStreamDetailSeasonProperties {
+                            name: s.name.clone(),
+                            season_number: s.season_number,
+                            episode_count: s.episode_count.parse::<u32>().unwrap_or(0),
+                            overview: s.overview.clone(),
+                            air_date: s.air_date.clone(),
+                            cover: s.cover.clone(),
+                            cover_tmdb: s.cover_tmdb.clone(),
+                            cover_big: s.cover_big.clone(),
+                            duration: s.duration.clone(),
+                        }).collect();
+                    seasons.sort_by_key(|season| season.season_number);
+                    Some(seasons)
+                },
+                episodes: {
+                    let mut episodes: Vec<SeriesStreamDetailEpisodeProperties> = info.episodes.iter().flat_map(|(_, list)| list.iter()).map(|e|
+                        SeriesStreamDetailEpisodeProperties {
+                            id: e.id.parse::<u32>().unwrap_or(0),
+                            episode_num: e.episode_num,
+                            season: e.season,
+                            title: e.title.clone(),
+                            container_extension: e.container_extension.clone(),
+                            custom_sid: e.custom_sid.clone(),
+                            added: e.added.clone(),
+                            direct_source: e.direct_source.clone(),
+                            tmdb: info.info.tmdb.parse::<u32>().ok(),
+                            release_date: e.info.air_date.clone(),
+                            plot: None,
+                            crew: e.info.crew.clone(),
+                            duration_secs: e.info.duration_secs,
+                            duration: e.info.duration.clone(),
+                            movie_image: e.info.movie_image.clone(),
+                            bitrate: e.info.bitrate,
+                            rating: Some(e.info.rating),
+                            video: None,
+                            audio: None,
+                        }).collect();
+                    episodes.sort_by_key(|episode| (episode.season, episode.episode_num));
+                    Some(episodes)
+                },
             }),
         }
     }

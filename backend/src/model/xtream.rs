@@ -80,7 +80,7 @@ pub fn normalize_release_date(document: &mut serde_json::Map<String, Value>) {
 #[derive(Deserialize, Serialize, Clone)]
 pub struct PlaylistXtreamCategory {
     #[serde(alias = "category_id")]
-    pub id: String,
+    pub id: u32,
     #[serde(alias = "category_name")]
     pub name: String,
 }

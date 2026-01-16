@@ -422,7 +422,7 @@ pub async fn load_input_playlist(ctx: &PlaylistProcessingContext, input: &Config
     }
 }
 
-fn get_input_m3u_playlist_file_path(storage_path: &Path, input_name: &Arc<str>) -> PathBuf {
+pub fn get_input_m3u_playlist_file_path(storage_path: &Path, input_name: &Arc<str>) -> PathBuf {
     let sanitized_input_name: String = input_name.chars()
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
         .collect();

@@ -277,8 +277,7 @@ async fn lineup_status(
             cfg.get_target_for_username(&app_state.device.t_username)
         {
             if target.has_output(TargetType::M3u) {
-                if let Some((_guard, iter)) =
-                    m3u_repository::iter_raw_m3u_playlist(&cfg, &target).await
+                if let Some((_guard, iter)) = m3u_repository::iter_raw_m3u_target_playlist(&cfg, &target, None).await
                 {
                     iter.count()
                 } else {
@@ -286,10 +285,8 @@ async fn lineup_status(
                 }
             } else if target.has_output(TargetType::Xtream) {
                 let credentials = Arc::new(user);
-                let live =
-                    XtreamPlaylistIterator::new(XtreamCluster::Live, &cfg, &target, None, &credentials).await.map_or(0, std::iter::Iterator::count);
-                let vod =
-                    XtreamPlaylistIterator::new(XtreamCluster::Video, &cfg, &target, None, &credentials).await.map_or(0, std::iter::Iterator::count);
+                let live = XtreamPlaylistIterator::new(XtreamCluster::Live, &cfg, &target, None, &credentials).await.map_or(0, std::iter::Iterator::count);
+                let vod = XtreamPlaylistIterator::new(XtreamCluster::Video, &cfg, &target, None, &credentials).await.map_or(0, std::iter::Iterator::count);
                 live + vod
             } else {
                 0

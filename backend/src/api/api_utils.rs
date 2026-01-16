@@ -1,4 +1,3 @@
-use crate::BUILD_TIMESTAMP;
 use crate::api::endpoints::xtream_api::{get_xtream_player_api_stream_url, ApiStreamContext};
 use crate::api::model::{create_channel_unavailable_stream, create_custom_video_stream_response,
                         create_provider_connections_exhausted_stream, create_provider_stream,
@@ -8,40 +7,44 @@ use crate::api::model::{create_channel_unavailable_stream, create_custom_video_s
 use crate::api::model::{tee_stream, UserSession};
 use crate::api::model::{ProviderAllocation, ProviderConfig, ProviderStreamState, StreamDetails, StreamingStrategy};
 use crate::api::panel_api::try_provision_account_on_exhausted;
+use crate::auth::Fingerprint;
 use crate::model::{ConfigInput, ResourceRetryConfig};
 use crate::model::{ConfigTarget, ProxyUserCredentials};
 use crate::tools::lru_cache::LRUResourceCache;
-use crate::utils::{request};
+use crate::utils::request::{content_type_from_ext, parse_range};
 use crate::utils::{async_file_reader, async_file_writer, create_new_file_for_write, get_file_extension};
 use crate::utils::{debug_if_enabled, trace_if_enabled};
-use crate::auth::Fingerprint;
-use crate::utils::request::{content_type_from_ext, parse_range};
+use crate::utils::request;
+use crate::BUILD_TIMESTAMP;
 
 use arc_swap::ArcSwapOption;
+use axum::body::Body;
 use axum::http::{header, HeaderMap, HeaderValue, Response, StatusCode};
 use axum::response::IntoResponse;
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use futures::{StreamExt, TryStreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use log::{debug, error, info, log_enabled, trace, warn};
 use reqwest::header::RETRY_AFTER;
 use serde::Serialize;
-use shared::model::{Claims, InputFetchMethod, PlaylistEntry, PlaylistItemType, StreamChannel, TargetType, UserConnectionPermission, XtreamCluster};
+use shared::concat_string;
+use shared::model::{Claims, InputFetchMethod, PlaylistEntry, PlaylistItemType, ProxyType, StreamChannel, TargetType, UserConnectionPermission, XtreamCluster};
 use shared::utils::{bin_serialize, default_grace_period_millis, human_readable_kbps, trim_slash, Internable};
 use shared::utils::{
     extract_extension_from_url, replace_url_extension, sanitize_sensitive_info, DASH_EXT, HLS_EXT,
 };
 use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
+use std::convert::Infallible;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
-use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::sync::Mutex;
 use tokio_util::io::ReaderStream;
 use url::Url;
-use shared::concat_string;
 
 const CONTENT_TYPE_BIN: &str = "application/cbor";
 
@@ -385,7 +388,7 @@ async fn resolve_streaming_strategy(
                         ProviderAllocation::Exhausted => {
                             let stream = create_provider_connections_exhausted_stream(&app_state.app_config, &[]);
                             ProviderStreamState::Custom(stream)
-                        },
+                        }
                         ProviderAllocation::Available(_) => ProviderStreamState::Available(Some(selected_provider_name.intern()), url.intern()),
                         ProviderAllocation::GracePeriod(_) => ProviderStreamState::GracePeriod(Some(selected_provider_name.intern()), url.intern()),
                     }
@@ -1557,8 +1560,115 @@ pub fn json_or_bin_response<T: Serialize>(accept: Option<&str>, data: &T) -> imp
     json_response(data).into_response()
 }
 
+pub fn stream_json_or_bin_response<P>(accept: Option<&str>, data: Box<dyn Iterator<Item=P> + Send>) -> axum::response::Response
+where
+    P: serde::Serialize + Send + 'static,
+{
+    if accept.is_some_and(|a| a.contains(CONTENT_TYPE_BIN)) {
+        return stream_bin_array(data);
+    }
+    stream_json_array(data)
+}
+
 pub fn create_session_fingerprint(fingerprint: &str, username: &str, virtual_id: u32) -> String {
     format!("{fingerprint}|{username}|{virtual_id}")
+}
+
+pub fn stream_json_array<P>(iter: Box<dyn Iterator<Item=P> + Send>) -> axum::response::Response
+where
+    P: serde::Serialize + Send + 'static,
+{
+    let stream = stream::unfold(
+        (iter, true),
+        |(mut iter, first)| async move {
+            match iter.next() {
+                Some(item) => {
+                    let mut json = String::new();
+                    if !first {
+                        json.push(',');
+                    }
+                    let element = serde_json::to_string(&item).ok()?;
+                    json.push_str(&element);
+                    Some((Ok::<Bytes, Infallible>(Bytes::from(json)), (iter, false)))
+                }
+                None => None,
+            }
+        },
+    );
+
+    let body = Body::from_stream(
+        stream::once(async { Ok::<_, Infallible>(Bytes::from_static(b"[")) })
+            .chain(stream)
+            .chain(stream::once(async {
+                Ok::<_, Infallible>(Bytes::from_static(b"]"))
+            })),
+    );
+
+    Response::builder()
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(body)
+        .unwrap()
+}
+
+pub fn stream_bin_array<P>(iter: Box<dyn Iterator<Item=P> + Send>) -> axum::response::Response
+where
+    P: serde::Serialize + Send + 'static,
+{
+    let stream = stream::unfold(
+        iter,
+        |mut iter| async move {
+            match iter.next() {
+                Some(item) => {
+                    match bin_serialize(&item) {
+                        Ok(buf) => Some((Ok::<Bytes, Infallible>(Bytes::from(buf)), iter)),
+                        Err(_) => Some((Ok::<Bytes, Infallible>(Bytes::new()), iter)), // skip errors, continue
+                    }
+                }
+                None => None,
+            }
+        },
+    );
+
+    let body = Body::from_stream(
+        stream::once(async {
+            // CBOR: start indefinite-length array
+            Ok::<_, Infallible>(Bytes::from_static(&[0x9f]))
+        })
+            .chain(stream)
+            .chain(stream::once(async {
+                // CBOR: end indefinite-length array
+                Ok::<_, Infallible>(Bytes::from_static(&[0xff]))
+            })),
+    );
+
+    try_unwrap_body!(Response::builder()
+        .header(header::CONTENT_TYPE, CONTENT_TYPE_BIN)
+        .body(body))
+}
+
+pub fn create_api_proxy_user(app_state: &Arc<AppState>) -> ProxyUserCredentials {
+    let config = app_state.app_config.config.load();
+
+    let server = config
+        .web_ui
+        .as_ref()
+        .and_then(|web_ui| web_ui.player_server.as_ref())
+        .map_or("default", |server_name| server_name.as_str());
+
+    ProxyUserCredentials {
+        username: "api_user".to_string(),
+        password: "api_user".to_string(),
+        token: None,
+        proxy: ProxyType::Reverse(None),
+        server: Some(server.to_string()),
+        epg_timeshift: None,
+        created_at: None,
+        exp_date: None,
+        max_connections: 0,
+        status: None,
+        ui_enabled: false,
+        comment: None,
+    }
 }
 
 #[cfg(test)]

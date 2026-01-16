@@ -65,15 +65,6 @@ pub struct CommonPlaylistItem {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct PlaylistResponseGroup {
-    pub id: u32,
-    #[serde(with = "arc_str_serde")]
-    pub title: Arc<str>,
-    pub channels: Vec<CommonPlaylistItem>,
-    pub xtream_cluster: XtreamCluster,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct UiPlaylistGroup {
     pub id: u32,
     #[serde(with = "arc_str_serde")]
@@ -81,28 +72,6 @@ pub struct UiPlaylistGroup {
     pub channels: Vec<Rc<CommonPlaylistItem>>,
     pub xtream_cluster: XtreamCluster,
 }
-
-impl From<PlaylistResponseGroup> for UiPlaylistGroup {
-    fn from(response: PlaylistResponseGroup) -> Self {
-        Self {
-            id: response.id,
-            title: response.title,
-            channels: response.channels.into_iter().map(Rc::new).collect(),
-            xtream_cluster: response.xtream_cluster,
-        }
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct PlaylistCategoriesResponse {
-    #[serde(default)]
-    pub live: Option<Vec<PlaylistResponseGroup>>,
-    #[serde(default)]
-    pub vod: Option<Vec<PlaylistResponseGroup>>,
-    #[serde(default)]
-    pub series: Option<Vec<PlaylistResponseGroup>>,
-}
-
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct UiPlaylistCategories {
@@ -112,16 +81,6 @@ pub struct UiPlaylistCategories {
     pub vod: Option<Vec<Rc<UiPlaylistGroup>>>,
     #[serde(default)]
     pub series: Option<Vec<Rc<UiPlaylistGroup>>>,
-}
-
-impl From<PlaylistCategoriesResponse> for UiPlaylistCategories {
-    fn from(response: PlaylistCategoriesResponse) -> Self {
-        Self {
-            live: response.live.map(|groups| groups.into_iter().map(Into::into).map(Rc::new).collect()),
-            vod: response.vod.map(|groups| groups.into_iter().map(Into::into).map(Rc::new).collect()),
-            series: response.series.map(|groups| groups.into_iter().map(Into::into).map(Rc::new).collect()),
-        }
-    }
 }
 
 fn filter_channels(
